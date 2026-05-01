@@ -1,0 +1,78 @@
+services:
+  backend:
+    image: caghb/parkguard-backend:1.0.0
+    build: ./backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongodb
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/
+      - MONGO_DB=parkguard_db
+      - JWT_SECRET=parkguard-dev-secret
+      - JWT_EXPIRE_MINUTES=60
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin
+      - FRONTEND_ORIGIN=http://localhost:3000
+      - COOKIE_SECURE=false
+      - COOKIE_SAMESITE=lax
+    networks:
+      - parkguard-net
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - parkguard-net
+
+  mongodb:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - parkguard-net
+    restart: unless-stopped
+
+  consumer:
+    image: caghb/parkguard-consumer:1.0.0
+    build: ./consumer
+    depends_on:
+      - mosquitto
+      - mongodb
+      - backend
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+      - MONGO_URI=mongodb://mongodb:27017/
+      - TOPIC_PREFIX=/parkguard
+    networks:
+      - parkguard-net
+    restart: unless-stopped
+
+  frontend:
+    image: caghb/parkguard-frontend:1.0.0
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+      - mosquitto
+    networks:
+      - parkguard-net
+    restart: unless-stopped
+
+networks:
+  parkguard-net:
+    driver: bridge
+
+volumes:
+  mongodb_data:
